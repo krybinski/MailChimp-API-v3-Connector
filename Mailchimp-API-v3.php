@@ -6,8 +6,9 @@
  */
 
 class MailchimpConnector {
+
     const STATUS_SUCCESS = "SUCCESS";
-    const STATUS_FAILED = "FAILDED";
+    const STATUS_FAILED = "FAILED";
 
     /**
      * @param string $server
@@ -16,6 +17,32 @@ class MailchimpConnector {
     public function __construct(string $server, string $apiKey) {
         $this->server = $server;
         $this->apiKey = $apiKey;
+
+        $this->headerAuth = array(
+			'Content-Type: application/json',
+            'Authorization: Basic ' . base64_encode('user:'. $apiKey),
+        );
+    }
+
+    /**
+     * Get members from list
+     * @param string $listId
+     */
+    public function getMembers(string $listId) {
+        $url = 'https://' . $this->server . '.api.mailchimp.com/3.0/lists/' . $listId . '/members/';
+
+        $ch = curl_init();
+		curl_setopt($ch, CURLOPT_URL, $url);
+		curl_setopt($ch, CURLOPT_HTTPHEADER, $this->headerAuth);
+		curl_setopt($ch, CURLOPT_USERAGENT, 'PHP-MCAPI/2.0');
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        $result = curl_exec($ch);
+
+        echo $this->getResult($ch, 'Members successfully received.');
+
+        curl_close($ch);
     }
 
     /**
@@ -27,8 +54,8 @@ class MailchimpConnector {
      * @param string $phone
      */
     public function addMember(string $listId, string $email, string $firstName = "", string $lastName = "", string $phone = "") {
-        $auth = base64_encode('user:'. $this->apiKey);
-        
+        $url = 'https://' . $this->server . '.api.mailchimp.com/3.0/lists/' . $listId . '/members/';
+
 		$data = array(
 			'apikey' => $this->apiKey,
 			'email_address' => $email,
@@ -41,11 +68,8 @@ class MailchimpConnector {
         );
         
         $ch = curl_init();
-		curl_setopt($ch, CURLOPT_URL, 'https://' . $this->server . '.api.mailchimp.com/3.0/lists/' . $listId . '/members/');
-		curl_setopt($ch, CURLOPT_HTTPHEADER, array(
-			'Content-Type: application/json',
-			'Authorization: Basic ' . $auth)
-		);
+		curl_setopt($ch, CURLOPT_URL, $url);
+		curl_setopt($ch, CURLOPT_HTTPHEADER, $this->headerAuth);
 		curl_setopt($ch, CURLOPT_USERAGENT, 'PHP-MCAPI/2.0');
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 		curl_setopt($ch, CURLOPT_TIMEOUT, 10);
@@ -54,19 +78,48 @@ class MailchimpConnector {
 		curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
         $result = curl_exec($ch);
 
-        if ($result === false) {
-            echo json_encode(array(
-                'status' => self::STATUS_FAILED,
-                'msg' => curl_error($ch),
-            ));
-        } else {
-            echo json_encode(array(
-                'status' => self::STATUS_SUCCESS,
-                'msg' => 'Member saved successfully.',
-            ));
-        }
+        echo $this->getResult($ch, 'Member saved successfully.');
 
         curl_close($ch);
+    }
+
+    /**
+     * Get success JSON
+     * @param any $result
+     * @param string $msg
+     */
+    private function getSuccessJson($result, string $msg) {
+        return json_encode(array(
+            'status' => self::STATUS_SUCCESS,
+            'msg' => $msg,
+            'data' => $result,
+        ));
+    }
+
+    /**
+     *  Get error JSON
+     * @param string $msg
+     */
+    private function getErrorJson($msg) {
+        return json_encode(array(
+            'status' => self::STATUS_FAILED,
+            'msg' => $msg,
+            'data' => array(),
+        ));
+    }
+
+    /**
+     * Get result
+     * @param any $ch
+     * @param string $msg
+     */
+    private function getResult($ch, string $msg) {
+        $result = curl_exec($ch);
+        $error = curl_error($ch);
+
+        return ($result === false)
+            ? $this->getErrorJson($error)
+            : $this->getSuccessJson($result, $msg);
     }
 }
 
